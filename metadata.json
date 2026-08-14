@@ -1,0 +1,6 @@
+{
+  "name": "CartaQR",
+  "description": "Carta digital para restaurantes y bares sin registro con código QR",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
