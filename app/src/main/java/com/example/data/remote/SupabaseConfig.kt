@@ -4,18 +4,18 @@ import android.content.Context
 import android.content.SharedPreferences
 
 object SupabaseConfig {
-  private const val PREF_NAME = "supabase_config_prefs"
+  private const val PREF_NAME = "supabase_config"
   private const val KEY_URL = "supabase_url"
-  private const val KEY_KEY = "supabase_anon_key"
+  private const val KEY_KEY = "supabase_key"
 
   fun getUrl(context: Context): String {
     val prefs = getPrefs(context)
-    return prefs.getString(KEY_URL, "") ?: ""
+    return prefs.getString(KEY_URL, "https://zoaetmigtjdrglzuziqw.supabase.co") ?: ""
   }
 
   fun getKey(context: Context): String {
     val prefs = getPrefs(context)
-    return prefs.getString(KEY_KEY, "") ?: ""
+    return prefs.getString(KEY_KEY, "sb_publishable_kIcTp2Uqg8RsY0oN_ZVfOg_GUltEXw0") ?: ""
   }
 
   fun saveConfig(context: Context, url: String, key: String) {

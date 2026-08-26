@@ -1,0 +1,120 @@
+name: Generar y Firmar APK CartaQR
+
+on: 
+  push: 
+    branches: [ main, master ] 
+  workflow_dispatch:
+
+jobs: 
+  build: 
+    runs-on: ubuntu-latest
+    
+    steps: 
+      - name: Checkout del código 
+        uses: actions/checkout@v4 
+        with: 
+          fetch-depth: 0
+      
+      - name: Configurar Java 21 
+        uses: actions/setup-java@v4 
+        with: 
+          distribution: 'temurin' 
+          java-version: '21'
+          
+      - name: Detectar estructura del proyecto de forma dinámica 
+        run: |
+          GRADLEW_PATH=$(find . -name "gradlew" | head -n 1)
+          if [ -z "$GRADLEW_PATH" ]; then
+            echo "No se encontró 'gradlew'. Se usará el comando Gradle global."
+            BUILD_GRADLE=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1)
+            if [ -z "$BUILD_GRADLE" ]; then
+              echo "ERROR: No se encontró ningún proyecto Android válido." && exit 1
+            fi
+            PROJECT_DIR=$(dirname "$BUILD_GRADLE")
+            echo "CMD_GRADLE=gradle" >> $GITHUB_ENV
+          else
+            echo "Se encontró gradlew en: $GRADLEW_PATH"
+            chmod +x "$GRADLEW_PATH"
+            PROJECT_DIR=$(dirname "$GRADLEW_PATH")
+            echo "CMD_GRADLE=./gradlew" >> $GITHUB_ENV
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+          JKS_PATH=$(find . -name "taxicuba-identity.jks" | head -n 1)
+          if [ -z "$JKS_PATH" ]; then
+            echo "ERROR: No se encontró el archivo de llaves .jks" && exit 1
+          fi
+          echo "JKS_PATH=$JKS_PATH" >> $GITHUB_ENV
+
+      - name: Forzar Modo Desatendido en Configuración de Gradle 
+        run: |
+          PROPERTIES_FILE="${{ env.PROJECT_DIR }}/gradle.properties"
+          touch "$PROPERTIES_FILE"
+          echo "" >> "$PROPERTIES_FILE"
+          echo "systemProp.java.awt.headless=true" >> "$PROPERTIES_FILE"
+          echo "org.gradle.jvmargs=-Djava.awt.headless=true -Xmx3072m" >> "$PROPERTIES_FILE"
+          echo "ksp.incremental=false" >> "$PROPERTIES_FILE"
+
+      - name: Extraer Alias de la Llave de Forma Automática 
+        id: extract_alias 
+        run: |
+          ABS_JKS_PATH=$(realpath ${{ env.JKS_PATH }})
+          echo "ABS_JKS_PATH=$ABS_JKS_PATH" >> $GITHUB_ENV
+          ALIAS=$(keytool -list -v -keystore "$ABS_JKS_PATH" -storepass "Hisa.261199." | grep "Alias name:" | head -n 1 | cut -d':' -f2 | xargs)
+          if [ -z "$ALIAS" ]; then
+            echo "ERROR: No se pudo extraer el alias." && exit 1
+          fi
+          echo "KEY_ALIAS=$ALIAS" >> $GITHUB_ENV
+
+      - name: Procesar e Inyectar Logotipo (Remoción Absoluta de Duplicados) 
+        run: |
+          sudo apt-get update && sudo apt-get install -y imagemagick
+          RES_DIR=$(find . -type d -name "res" | grep -v "build" | grep "main" | head -n 1)
+          if [ -z "$RES_DIR" ]; then
+            echo "ERROR: No se encontró la carpeta 'res'." && exit 1
+          fi
+          if [ ! -f "logo.png" ]; then
+            echo "ERROR: No se encontró logo.png en la raíz." && exit 1
+          fi
+          # Purga total de conflictos
+          find "$RES_DIR" -name "ic_launcher.xml" -delete
+          find "$RES_DIR" -name "ic_launcher_round.xml" -delete
+          find "$RES_DIR" -name "ic_launcher.webp" -delete
+          find "$RES_DIR" -name "ic_launcher_round.webp" -delete
+          find "$RES_DIR" -name "ic_launcher.png" -delete
+          find "$RES_DIR" -name "ic_launcher_round.png" -delete
+          # Inyección escalada limpia
+          mkdir -p "$RES_DIR/mipmap-mdpi" && convert logo.png -resize 48x48 "$RES_DIR/mipmap-mdpi/ic_launcher.png"
+          mkdir -p "$RES_DIR/mipmap-hdpi" && convert logo.png -resize 72x72 "$RES_DIR/mipmap-hdpi/ic_launcher.png"
+          mkdir -p "$RES_DIR/mipmap-xhdpi" && convert logo.png -resize 96x96 "$RES_DIR/mipmap-xhdpi/ic_launcher.png"
+          mkdir -p "$RES_DIR/mipmap-xxhdpi" && convert logo.png -resize 144x144 "$RES_DIR/mipmap-xxhdpi/ic_launcher.png"
+          mkdir -p "$RES_DIR/mipmap-xxxhdpi" && convert logo.png -resize 192x192 "$RES_DIR/mipmap-xxxhdpi/ic_launcher.png"
+          cp "$RES_DIR/mipmap-mdpi/ic_launcher.png" "$RES_DIR/mipmap-mdpi/ic_launcher_round.png"
+          cp "$RES_DIR/mipmap-hdpi/ic_launcher.png" "$RES_DIR/mipmap-hdpi/ic_launcher_round.png"
+          cp "$RES_DIR/mipmap-xhdpi/ic_launcher.png" "$RES_DIR/mipmap-xhdpi/ic_launcher_round.png"
+          cp "$RES_DIR/mipmap-xxhdpi/ic_launcher.png" "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png"
+          cp "$RES_DIR/mipmap-xxxhdpi/ic_launcher.png" "$RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png"
+
+      - name: Compilar y Firmar APK (Inyección Directa) 
+        run: |
+          cd ${{ env.PROJECT_DIR }}
+          ${{ env.CMD_GRADLE }} assembleRelease \
+            -Pandroid.injected.signing.store.file="${{ env.ABS_JKS_PATH }}" \
+            -Pandroid.injected.signing.store.password="Hisa.261199." \
+            -Pandroid.injected.signing.key.alias="${{ env.KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="Hisa.261199."
+
+      - name: Organizar Artefacto Final 
+        run: |
+          mkdir -p salida_final
+          APK_SIGNED=$(find . -path "*/build/outputs/apk/release/*.apk" | head -n 1)
+          if [ -z "$APK_SIGNED" ]; then
+            echo "ERROR: No se localizó el APK." && exit 1
+          fi
+          cp "$APK_SIGNED" salida_final/CartaQR.apk
+
+      - name: Subir CartaQR APK listo 
+        uses: actions/upload-artifact@v4 
+        with: 
+          name: CartaQR-Descarga 
+          path: salida_final/CartaQR.apk

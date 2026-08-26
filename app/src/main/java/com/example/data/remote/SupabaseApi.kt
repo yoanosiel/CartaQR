@@ -27,11 +27,11 @@ class SupabaseApi(private val context: Context) {
         .build()
 
     fun getSupabaseUrl(): String {
-        return prefs.getString("supabase_url", "") ?: ""
+        return prefs.getString("supabase_url", "https://zoaetmigtjdrglzuziqw.supabase.co") ?: ""
     }
 
     fun getSupabaseKey(): String {
-        return prefs.getString("supabase_key", "") ?: ""
+        return prefs.getString("supabase_key", "sb_publishable_kIcTp2Uqg8RsY0oN_ZVfOg_GUltEXw0") ?: ""
     }
 
     fun saveConfig(url: String, key: String) {
