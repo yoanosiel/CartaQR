@@ -30,9 +30,7 @@ jobs:
           GRADLEW_PATH=$(find . -name "gradlew" | head -n 1)
           if [ -z "$GRADLEW_PATH" ]; then
             BUILD_GRADLE=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1)
-            if [ -z "$BUILD_GRADLE" ]; then
-              echo "ERROR: No se encontro proyecto Android." && exit 1
-            fi
+            if [ -z "$BUILD_GRADLE" ]; then echo "ERROR: no proyecto Android" && exit 1; fi
             PROJECT_DIR=$(dirname "$BUILD_GRADLE")
             echo "CMD_GRADLE=gradle" >> $GITHUB_ENV
           else
@@ -42,9 +40,7 @@ jobs:
           fi
           echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
           JKS_PATH=$(find . -name "taxicuba-identity.jks" | head -n 1)
-          if [ -z "$JKS_PATH" ]; then
-            echo "ERROR: No se encontro el .jks" && exit 1
-          fi
+          if [ -z "$JKS_PATH" ]; then echo "ERROR: no .jks" && exit 1; fi
           echo "JKS_PATH=$JKS_PATH" >> $GITHUB_ENV
 
       - name: Forzar Modo Desatendido
@@ -85,6 +81,11 @@ jobs:
           cp "$RES_DIR/mipmap-xhdpi/ic_launcher.png" "$RES_DIR/mipmap-xhdpi/ic_launcher_round.png"
           cp "$RES_DIR/mipmap-xxhdpi/ic_launcher.png" "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png"
           cp "$RES_DIR/mipmap-xxxhdpi/ic_launcher.png" "$RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png"
+
+      - name: Prueba de arranque (detector de crash)
+        run: |
+          cd ${{ env.PROJECT_DIR }}
+          ${{ env.CMD_GRADLE }} testReleaseUnitTest --tests "com.example.StartupTest" || true
 
       - name: Compilar y Firmar APK
         run: |
