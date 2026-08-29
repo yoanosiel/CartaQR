@@ -111,7 +111,7 @@ jobs:
             PKG=$(adb shell pm list packages | grep -i example | head -n1 | cut -d: -f3)
             echo "PACKAGE=$PKG"
             adb install -r salida_final/CartaQR.apk
-            adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 || true
+            adb shell am start -n com.example/.MainActivity || true
             sleep 20
             adb logcat -d > logcat.txt || true
             echo "===== CRASH ====="
