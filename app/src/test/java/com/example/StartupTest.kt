@@ -15,6 +15,6 @@ class StartupTest {
     fun laAppArranca() {
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup()
         Shadows.shadowOf(Looper.getMainLooper()).idle()
-        println("ACTIVITY CREADA: " + (activity != null))
+        println("ACTIVITY OK: " + (activity != null))
     }
 }
