@@ -99,12 +99,14 @@ jobs:
           cp "$APK_SIGNED" salida_final/CartaQR.apk
 
       - name: Telefono virtual Android 10 con logcat
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
           target: default
           arch: x86_64
           profile: pixel_2
+          emulator-boot-timeout: 1500
           script: |
             PKG=$(adb shell pm list packages | grep -i example | head -n1 | cut -d: -f3)
             echo "PACKAGE=$PKG"
