@@ -20,7 +20,7 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Configurar Gradle 8.14 compatible con Kotlin 2.2.20
+      - name: Configurar Gradle 8.14
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14'
@@ -82,11 +82,6 @@ jobs:
           cp "$RES_DIR/mipmap-xxhdpi/ic_launcher.png" "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png"
           cp "$RES_DIR/mipmap-xxxhdpi/ic_launcher.png" "$RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png"
 
-      - name: Prueba de arranque (detector de crash)
-        run: |
-          cd ${{ env.PROJECT_DIR }}
-          ${{ env.CMD_GRADLE }} testReleaseUnitTest --tests "com.example.StartupTest" || true
-
       - name: Compilar y Firmar APK
         run: |
           cd ${{ env.PROJECT_DIR }}
@@ -103,8 +98,35 @@ jobs:
           if [ -z "$APK_SIGNED" ]; then echo "ERROR: no APK" && exit 1; fi
           cp "$APK_SIGNED" salida_final/CartaQR.apk
 
+      - name: Telefono virtual Android 10 con logcat
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          script: |
+            PKG=$(adb shell pm list packages | grep -i example | head -n1 | cut -d: -f3)
+            echo "PACKAGE=$PKG"
+            adb install -r salida_final/CartaQR.apk
+            adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 || true
+            sleep 20
+            adb logcat -d > logcat.txt || true
+            echo "===== CRASH ====="
+            grep -B 2 -A 40 "FATAL EXCEPTION" logcat.txt || true
+            echo "===== ULTIMAS LINEAS ====="
+            tail -n 80 logcat.txt || true
+
+      - name: Subir logcat del telefono virtual
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logcat-crash
+          path: logcat.txt
+
       - name: Subir CartaQR APK
         uses: actions/upload-artifact@v4
         with:
           name: CartaQR-Descarga
           path: salida_final/CartaQR.apk
+          
