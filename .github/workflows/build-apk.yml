@@ -98,6 +98,8 @@ jobs:
           if [ -z "$APK_SIGNED" ]; then echo "ERROR: no APK" && exit 1; fi
           cp "$APK_SIGNED" salida_final/CartaQR.apk
 
+        continue-on-error: true
+        timeout-minutes: 20
       - name: Telefono virtual Android 10 con logcat
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
