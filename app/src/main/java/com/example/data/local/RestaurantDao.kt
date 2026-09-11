@@ -26,7 +26,6 @@ interface RestaurantDao {
   @Query("DELETE FROM restaurants WHERE id = :id")
   suspend fun deleteRestaurant(id: String)
 
-  // Categories
   @Query("SELECT * FROM categories WHERE restaurantId = :restaurantId ORDER BY displayOrder ASC")
   fun getCategoriesForRestaurant(restaurantId: String): Flow<List<Category>>
 
@@ -39,12 +38,14 @@ interface RestaurantDao {
   @Query("DELETE FROM categories WHERE id = :id")
   suspend fun deleteCategory(id: String)
 
-  // Menu Items
   @Query("SELECT * FROM menu_items WHERE restaurantId = :restaurantId")
   fun getMenuItemsForRestaurant(restaurantId: String): Flow<List<MenuItem>>
 
   @Query("SELECT * FROM menu_items WHERE restaurantId = :restaurantId")
   suspend fun getMenuItemsList(restaurantId: String): List<MenuItem>
+
+  @Query("SELECT * FROM menu_items WHERE id = :id LIMIT 1")
+  suspend fun getMenuItemById(id: String): MenuItem?
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertMenuItem(item: MenuItem)
