@@ -6,20 +6,42 @@ import com.example.data.local.RestaurantDao
 import com.example.data.model.Category
 import com.example.data.model.MenuItem
 import com.example.data.model.Restaurant
+import com.example.data.remote.SupabaseApi
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 class MenuRepository(context: Context) {
   private val dao: RestaurantDao = AppDatabase.getDatabase(context).restaurantDao()
+  private val supabase = SupabaseApi(context)
 
   val allRestaurants: Flow<List<Restaurant>> = dao.getAllRestaurants()
 
   suspend fun getRestaurantById(id: String): Restaurant? {
-    return dao.getRestaurantById(id)
+    return try {
+      supabase.getRestaurantById(id)?.also { cacheRestaurantData(it) }
+        ?: dao.getRestaurantById(id)
+    } catch (_: Exception) {
+      dao.getRestaurantById(id)
+    }
   }
 
   suspend fun getRestaurantByAdminToken(token: String): Restaurant? {
-    return dao.getRestaurantByAdminToken(token)
+    return try {
+      supabase.getRestaurantByAdminToken(token)?.also { cacheRestaurantData(it) }
+        ?: dao.getRestaurantByAdminToken(token)
+    } catch (_: Exception) {
+      dao.getRestaurantByAdminToken(token)
+    }
+  }
+
+  private suspend fun cacheRestaurantData(restaurant: Restaurant) {
+    dao.insertRestaurant(restaurant)
+    try {
+      supabase.getCategories(restaurant.id).forEach { dao.insertCategory(it) }
+      supabase.getMenuItems(restaurant.id).forEach { dao.insertMenuItem(it) }
+    } catch (_: Exception) {
+      // Keep cached data available if a secondary remote query fails.
+    }
   }
 
   suspend fun createRestaurant(
@@ -40,16 +62,13 @@ class MenuRepository(context: Context) {
     )
     dao.insertRestaurant(restaurant)
 
-    // Insert default categories
     val cat1 = Category(id = "cat_${UUID.randomUUID().toString().take(6)}", restaurantId = id, name = "Entrantes", displayOrder = 1)
     val cat2 = Category(id = "cat_${UUID.randomUUID().toString().take(6)}", restaurantId = id, name = "Platos Principales", displayOrder = 2)
     val cat3 = Category(id = "cat_${UUID.randomUUID().toString().take(6)}", restaurantId = id, name = "Postres y Bebidas", displayOrder = 3)
-    
     dao.insertCategory(cat1)
     dao.insertCategory(cat2)
     dao.insertCategory(cat3)
 
-    // Insert sample menu items for instant demo delight
     val item1 = MenuItem(
       id = "item_${UUID.randomUUID().toString().take(6)}",
       restaurantId = id,
@@ -84,26 +103,35 @@ class MenuRepository(context: Context) {
       isVegetarian = true,
       allergens = "Lácteos, Huevo"
     )
-
     dao.insertMenuItem(item1)
     dao.insertMenuItem(item2)
     dao.insertMenuItem(item3)
 
+    // Supabase is the persistent source of truth. Keep the local Room copy as cache.
+    val synced = supabase.syncRestaurantToCloud(
+      restaurant,
+      listOf(cat1, cat2, cat3),
+      listOf(item1, item2, item3)
+    )
+    if (!synced) {
+      android.util.Log.e("MenuRepository", "Restaurant created locally but Supabase sync failed")
+    }
     return restaurant
   }
 
   suspend fun updateRestaurant(restaurant: Restaurant) {
     dao.insertRestaurant(restaurant)
+    val categories = dao.getCategoriesList(restaurant.id)
+    val items = dao.getMenuItemsList(restaurant.id)
+    supabase.syncRestaurantToCloud(restaurant, categories, items)
   }
 
   suspend fun deleteRestaurant(id: String) {
     dao.deleteRestaurant(id)
   }
 
-  // Category management
-  fun getCategories(restaurantId: String): Flow<List<Category>> {
-    return dao.getCategoriesForRestaurant(restaurantId)
-  }
+  fun getCategories(restaurantId: String): Flow<List<Category>> =
+    dao.getCategoriesForRestaurant(restaurantId)
 
   suspend fun addCategory(restaurantId: String, name: String): Category {
     val existing = dao.getCategoriesList(restaurantId)
@@ -114,6 +142,10 @@ class MenuRepository(context: Context) {
       displayOrder = existing.size + 1
     )
     dao.insertCategory(category)
+    val restaurant = dao.getRestaurantById(restaurantId)
+    if (restaurant != null) {
+      supabase.syncRestaurantToCloud(restaurant, dao.getCategoriesList(restaurantId), dao.getMenuItemsList(restaurantId))
+    }
     return category
   }
 
@@ -121,13 +153,15 @@ class MenuRepository(context: Context) {
     dao.deleteCategory(id)
   }
 
-  // Menu item management
-  fun getMenuItems(restaurantId: String): Flow<List<MenuItem>> {
-    return dao.getMenuItemsForRestaurant(restaurantId)
-  }
+  fun getMenuItems(restaurantId: String): Flow<List<MenuItem>> =
+    dao.getMenuItemsForRestaurant(restaurantId)
 
   suspend fun saveMenuItem(item: MenuItem) {
     dao.insertMenuItem(item)
+    val restaurant = dao.getRestaurantById(item.restaurantId)
+    if (restaurant != null) {
+      supabase.syncRestaurantToCloud(restaurant, dao.getCategoriesList(item.restaurantId), dao.getMenuItemsList(item.restaurantId))
+    }
   }
 
   suspend fun deleteMenuItem(id: String) {
@@ -136,5 +170,12 @@ class MenuRepository(context: Context) {
 
   suspend fun toggleMenuItemAvailability(id: String, isAvailable: Boolean) {
     dao.updateMenuItemAvailability(id, isAvailable)
+    val item = dao.getMenuItemsList("").firstOrNull { it.id == id }
+    if (item != null) {
+      val restaurant = dao.getRestaurantById(item.restaurantId)
+      if (restaurant != null) {
+        supabase.syncRestaurantToCloud(restaurant, dao.getCategoriesList(item.restaurantId), dao.getMenuItemsList(item.restaurantId))
+      }
+    }
   }
 }
